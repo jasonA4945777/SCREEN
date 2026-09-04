@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>就醫資料截圖整理</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+:root{
+  --paper:#F1F4F2; --card:#FFFFFF; --ink:#15211D; --muted:#5C6B65;
+  --line:#D2DBD6; --teal:#0E6B5E; --teal-soft:#E2EFEB; --amber:#9A6410; --red:#A32C24;
+}
+*{box-sizing:border-box}
+body{
+  margin:0; background:var(--paper); color:var(--ink);
+  font-family:"Noto Sans TC",system-ui,sans-serif; line-height:1.6;
+}
+header{padding:28px 20px 20px; max-width:1180px; margin:0 auto}
+h1{font-size:1.55rem; font-weight:700; letter-spacing:-.02em; margin:0 0 6px}
+header p{margin:0; color:var(--muted); font-size:.92rem; max-width:52ch}
+main{max-width:1180px; margin:0 auto; padding:0 20px 64px; display:grid; gap:20px; grid-template-columns:340px 1fr}
+@media(max-width:880px){main{grid-template-columns:1fr}}
+.panel{background:var(--card); border:1px solid var(--line); border-radius:10px; padding:18px}
+.drop{
+  border:1.5px dashed var(--line); border-radius:8px; padding:30px 16px; text-align:center;
+  cursor:pointer; transition:background .15s,border-color .15s; background:#FBFCFB;
+}
+.drop:hover,.drop.over{border-color:var(--teal); background:var(--teal-soft)}
+.drop strong{display:block; font-weight:500}
+.drop span{font-size:.83rem; color:var(--muted)}
+.thumbs{display:flex; flex-wrap:wrap; gap:8px; margin-top:14px}
+.thumb{position:relative; width:64px; height:64px; border-radius:6px; overflow:hidden; border:1px solid var(--line)}
+.thumb img{width:100%; height:100%; object-fit:cover}
+.thumb button{position:absolute; top:2px; right:2px; border:0; background:rgba(21,33,29,.75); color:#fff; width:18px; height:18px; border-radius:50%; cursor:pointer; font-size:11px; line-height:1; padding:0}
+button.act{
+  width:100%; margin-top:14px; padding:11px; border-radius:7px; border:0; cursor:pointer;
+  background:var(--teal); color:#fff; font-family:inherit; font-size:.95rem; font-weight:500;
+}
+button.act:disabled{background:#B7C2BD; cursor:not-allowed}
+button.ghost{background:transparent; color:var(--teal); border:1px solid var(--line)}
+label.fld{display:block; font-size:.82rem; color:var(--muted); margin:16px 0 5px}
+input[type=text],input[type=password]{width:100%; padding:9px 10px; border:1px solid var(--line); border-radius:6px; font-family:inherit; font-size:.9rem; background:#fff; color:var(--ink)}
+table{width:100%; border-collapse:collapse; font-size:.9rem}
+th{text-align:left; font-weight:500; color:var(--muted); font-size:.8rem; padding:0 8px 8px; border-bottom:1px solid var(--line)}
+td{padding:4px; border-bottom:1px solid #EDF1EF; vertical-align:middle}
+td input{width:100%; border:1px solid transparent; background:transparent; padding:7px 6px; border-radius:5px; font-family:inherit; font-size:.9rem; color:var(--ink)}
+td input:focus{border-color:var(--teal); background:#fff; outline:none}
+td.mono input{font-family:"IBM Plex Mono",monospace}
+.del{border:0; background:none; color:var(--muted); cursor:pointer; font-size:1rem; padding:4px 6px}
+.del:hover{color:var(--red)}
+.bar{display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:14px; flex-wrap:wrap}
+.bar h2{font-size:1rem; font-weight:500; margin:0}
+.bar .btns{display:flex; gap:8px}
+.bar .btns button{width:auto; margin:0; padding:8px 14px; font-size:.88rem}
+.empty{text-align:center; padding:44px 12px; color:var(--muted); font-size:.9rem}
+.status{margin-top:12px; font-size:.85rem; color:var(--muted); min-height:1.4em}
+.status.err{color:var(--red)}
+.hint{font-size:.78rem; color:var(--muted); margin-top:6px}
+.wrap{overflow-x:auto}
+tr.warn td{background:#FDF6EA}
+</style>
+</head>
+<body>
+<header>
+  <h1>就醫資料截圖整理</h1>
+  <p>貼上或選擇截圖，自動讀出姓名、病歷號與就醫日期，確認後匯出成 Excel。</p>
+</header>
+
+<main>
+  <section class="panel">
+    <div class="drop" id="drop">
+      <strong>拖曳或點擊選擇截圖</strong>
+      <span>也可以直接按 Ctrl/⌘ + V 貼上</span>
+    </div>
+    <input type="file" id="file" accept="image/*" multiple hidden>
+    <div class="thumbs" id="thumbs"></div>
+
+    <button class="act" id="run" disabled>開始辨識</button>
+    <div class="status" id="status"></div>
+
+    <label class="fld" for="key">API 金鑰（自行架站時才需要填）</label>
+    <input type="password" id="key" placeholder="sk-ant-...">
+    <p class="hint">在 Claude 的畫面裡執行可以留空。放到 GitHub Pages 之後，就要填自己的金鑰。</p>
+  </section>
+
+  <section class="panel">
+    <div class="bar">
+      <h2>辨識結果</h2>
+      <div class="btns">
+        <button class="act ghost" id="add">新增一列</button>
+        <button class="act" id="xlsx" disabled>匯出 Excel</button>
+      </div>
+    </div>
+    <div class="wrap">
+      <table>
+        <thead>
+          <tr><th style="width:22%">姓名</th><th style="width:24%">病歷號</th><th style="width:24%">就醫日期</th><th>來源</th><th style="width:36px"></th></tr>
+        </thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </div>
+    <div class="empty" id="empty">還沒有資料。左邊放入截圖後按開始辨識。</div>
+  </section>
+</main>
+
+<script>
+const $ = s => document.querySelector(s);
+let files = [];   // {name, b64, mime, url}
+let rows  = [];   // {name, mrn, date, src, warn}
+
+/* ---------- 圖片收集 ---------- */
+const drop = $('#drop');
+drop.onclick = () => $('#file').click();
+$('#file').onchange = e => addFiles([...e.target.files]);
+['dragenter','dragover'].forEach(t => drop.addEventListener(t, e => { e.preventDefault(); drop.classList.add('over'); }));
+['dragleave','drop'].forEach(t => drop.addEventListener(t, e => { e.preventDefault(); drop.classList.remove('over'); }));
+drop.addEventListener('drop', e => addFiles([...e.dataTransfer.files].filter(f => f.type.startsWith('image/'))));
+window.addEventListener('paste', e => {
+  const imgs = [...e.clipboardData.items].filter(i => i.type.startsWith('image/')).map(i => i.getAsFile());
+  if (imgs.length) addFiles(imgs);
+});
+
+async function addFiles(list){
+  for (const f of list){
+    const b64 = await new Promise(res => { const r = new FileReader(); r.onload = () => res(r.result.split(',')[1]); r.readAsDataURL(f); });
+    files.push({ name: f.name || '貼上的截圖', mime: f.type === 'image/jpg' ? 'image/jpeg' : f.type, b64, url: URL.createObjectURL(f) });
+  }
+  renderThumbs();
+}
+function renderThumbs(){
+  $('#thumbs').innerHTML = files.map((f,i)=>
+    `<div class="thumb"><img src="${f.url}" alt=""><button data-i="${i}" aria-label="移除">×</button></div>`).join('');
+  $('#thumbs').querySelectorAll('button').forEach(b => b.onclick = () => { files.splice(+b.dataset.i,1); renderThumbs(); });
+  $('#run').disabled = files.length === 0;
+}
+
+/* ---------- 呼叫模型 ---------- */
+const PROMPT = `你是一個醫療行政資料擷取工具。請從這張截圖中找出所有病人的「姓名」、「病歷號」與「就醫日期」。
+
+規則：
+- 病歷號可能標示為病歷號、病歷號碼、病歷、chart no、MRN、ID 等，只取數字或英數編號。
+- 就醫日期一律轉成 YYYY-MM-DD。若是民國年（例如 114/03/05 或 1140305），請加 1911 換算成西元。
+- 一張圖若有多筆資料，就回傳多筆。
+- 讀不到的欄位填空字串 ""，不要臆測或編造。
+
+只輸出 JSON 陣列，不要任何說明文字或 markdown 標記，格式為：
+[{"name":"","mrn":"","date":""}]`;
+
+async function extract(f){
+  const key = $('#key').value.trim();
+  const headers = { 'Content-Type':'application/json' };
+  if (key){ headers['x-api-key'] = key; headers['anthropic-version'] = '2023-06-01'; headers['anthropic-dangerous-direct-browser-access'] = 'true'; }
+  const res = await fetch('https://api.anthropic.com/v1/messages', {
+    method:'POST', headers,
+    body: JSON.stringify({
+      model:'claude-sonnet-4-6', max_tokens:1000,
+      messages:[{ role:'user', content:[
+        { type:'image', source:{ type:'base64', media_type:f.mime || 'image/png', data:f.b64 } },
+        { type:'text', text: PROMPT }
+      ]}]
+    })
+  });
+  if (!res.ok) throw new Error('伺服器回應 ' + res.status);
+  const data = await res.json();
+  const text = data.content.filter(c => c.type === 'text').map(c => c.text).join('').replace(/```json|```/g,'').trim();
+  const start = text.indexOf('['), end = text.lastIndexOf(']');
+  return JSON.parse(text.slice(start, end + 1));
+}
+
+$('#run').onclick = async () => {
+  $('#run').disabled = true;
+  const st = $('#status'); st.className = 'status';
+  let done = 0, failed = 0;
+  for (const f of files){
+    st.textContent = `辨識中 ${done + 1} / ${files.length}…`;
+    try {
+      const out = await extract(f);
+      out.forEach(r => rows.push({
+        name: r.name || '', mrn: r.mrn || '', date: r.date || '', src: f.name,
+        warn: !(r.name && r.mrn && r.date)
+      }));
+    } catch (err) {
+      failed++;
+      rows.push({ name:'', mrn:'', date:'', src: f.name, warn:true });
+      console.error(err);
+    }
+    done++; renderRows();
+  }
+  st.textContent = failed
+    ? `完成 ${done} 張，其中 ${failed} 張讀取失敗，請手動補上或重新上傳。`
+    : `完成 ${done} 張。黃底的列代表有欄位沒讀到，請確認後再匯出。`;
+  if (failed) st.className = 'status err';
+  files = []; renderThumbs();
+};
+
+/* ---------- 表格 ---------- */
+function renderRows(){
+  $('#empty').style.display = rows.length ? 'none' : 'block';
+  $('#xlsx').disabled = rows.length === 0;
+  $('#rows').innerHTML = rows.map((r,i) => `
+    <tr class="${r.warn ? 'warn' : ''}">
+      <td><input value="${esc(r.name)}" data-i="${i}" data-k="name"></td>
+      <td class="mono"><input value="${esc(r.mrn)}" data-i="${i}" data-k="mrn"></td>
+      <td class="mono"><input value="${esc(r.date)}" data-i="${i}" data-k="date" placeholder="YYYY-MM-DD"></td>
+      <td style="color:var(--muted);font-size:.8rem;padding-left:8px">${esc(r.src || '手動輸入')}</td>
+      <td><button class="del" data-d="${i}" aria-label="刪除這列">×</button></td>
+    </tr>`).join('');
+  $('#rows').querySelectorAll('input').forEach(inp => inp.oninput = () => {
+    rows[+inp.dataset.i][inp.dataset.k] = inp.value;
+    const r = rows[+inp.dataset.i];
+    r.warn = !(r.name && r.mrn && r.date);
+    inp.closest('tr').className = r.warn ? 'warn' : '';
+  });
+  $('#rows').querySelectorAll('.del').forEach(b => b.onclick = () => { rows.splice(+b.dataset.d,1); renderRows(); });
+}
+const esc = s => String(s ?? '').replace(/"/g,'&quot;').replace(/</g,'&lt;');
+
+$('#add').onclick = () => { rows.push({ name:'', mrn:'', date:'', src:'', warn:true }); renderRows(); };
+
+$('#xlsx').onclick = () => {
+  const aoa = [['姓名','病歷號','就醫日期'], ...rows.map(r => [r.name, r.mrn, r.date])];
+  const ws = XLSX.utils.aoa_to_sheet(aoa);
+  ws['!cols'] = [{ wch:14 },{ wch:16 },{ wch:14 }];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, '就醫資料');
+  const d = new Date(), p = n => String(n).padStart(2,'0');
+  XLSX.writeFile(wb, `就醫資料_${d.getFullYear()}${p(d.getMonth()+1)}${p(d.getDate())}.xlsx`);
+};
+
+renderRows();
+</script>
+</body>
+</html>
