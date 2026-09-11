@@ -141,8 +141,8 @@ function renderThumbs(){
 }
 
 /* ---------- 呼叫模型 ---------- */
-/* 部署後把這裡換成你的 Worker 網址 */
-const WORKER_URL = 'https://screen.tippijason.workers.dev';
+/* 網頁與 API 在同一個 Worker 上，用相對路徑即可 */
+const WORKER_URL = '/api';
 
 async function extract(f){
   const res = await fetch(WORKER_URL, {
@@ -157,11 +157,6 @@ async function extract(f){
 
 $('#run').onclick = async () => {
   const st = $('#status');
-  if (WORKER_URL.includes('你的worker名稱')){
-    st.className = 'status err';
-    st.textContent = '尚未設定 Worker 網址，請編輯這個檔案裡的 WORKER_URL。';
-    return;
-  }
   if (!$('#key').value.trim()){
     st.className = 'status err';
     st.textContent = '請先在下方填入通行碼。';
